@@ -5,23 +5,27 @@ namespace PlayerStatsSync {
         public int FPS {get;set;}
         public string Nickname {get;set;}
         public string ProfileID {get;set;}
+        public string Timestamp{get;set;}
 
-        public PlayerStatsPacket (int FPS, string Nickname, string ProfileID) {
+        public PlayerStatsPacket (int FPS, string Nickname, string ProfileID, string Timestamp){
             this.FPS = FPS;
             this.Nickname = Nickname;
             this.ProfileID = ProfileID;
+            this.Timestamp = Timestamp;
         }
 
         public void Deserialize(NetDataReader reader){
             this.FPS = reader.GetInt();
             this.Nickname = reader.GetString();
             this.ProfileID = reader.GetString();
+            this.Timestamp=reader.GetString();
         }
 
         public void Serialize(NetDataWriter writer){
             writer.Put(FPS);
             writer.Put(Nickname);
             writer.Put(ProfileID);
+            writer.Put(Timestamp);
         }
     }
 }

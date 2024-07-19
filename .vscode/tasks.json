@@ -9,26 +9,34 @@
 			"label": "dotnet: clean"
 		},
 		{
-            "taskName": "build Debug",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "build",
-                "${workspaceFolder}/PlayerStatsSync.csproj"
-            ],
-            "problemMatcher": "$msCompile"
-        },
-        {
-            "taskName": "build Release",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "build",
-                "${workspaceFolder}/PlayerStatsSync.csproj",
-                "-c",
-                "Release"
-            ],
-            "problemMatcher": "$msCompile"
-        }    
+			"taskName": "build Debug",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"build",
+				"${workspaceFolder}/PlayerStatsSync.csproj"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"taskName": "build Release",
+			"command": "dotnet",
+			"type": "process",
+			"group": "build",
+			"args": [
+				"build",
+				"${workspaceFolder}/PlayerStatsSync.csproj",
+				"-c",
+				"Release"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"type": "dotnet",
+			"task": "build",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "dotnet: build"
+		}
 	]
 }
