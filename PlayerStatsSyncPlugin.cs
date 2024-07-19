@@ -12,6 +12,7 @@ using UnityEngine;
 using EFT;
 using System.Collections.Generic;
 using Fika.Core.Coop.Matchmaker;
+using System.Text.RegularExpressions;
 
 namespace PlayerStatsSync;
 
@@ -63,6 +64,8 @@ public class Plugin : BaseUnityPlugin
         showGUI = true;
         FikaEventDispatcher.SubscribeEvent<FikaClientCreatedEvent>(OnClientCreatedEvent);
         FikaEventDispatcher.SubscribeEvent<FikaClientDestroyedEvent>(OnClientDestroyedEvent);
+        // TODO
+        // Server does not receive this event! Figure out another way to get UpdateStats running on server
         FikaEventDispatcher.SubscribeEvent<GameWorldStartedEvent>(OnGameWorldStartedEvent);
 
         FikaEventDispatcher.SubscribeEvent<FikaServerCreatedEvent>(OnServerCreatedEvent);
@@ -106,7 +109,6 @@ public class Plugin : BaseUnityPlugin
     }
 
     private void UpdateMyStats() {
-        Logger.LogInfo("Updating my stats");
         if (!Singleton<GameWorld>.Instantiated) {
             return;
         }
@@ -132,14 +134,12 @@ public class Plugin : BaseUnityPlugin
 
         if (MatchmakerAcceptPatches.IsClient) {
             Logger.LogInfo($"Sending packet to server: {packet.Timestamp} {packet.Nickname} {packet.ProfileID} {packet.FPS}");
-            writer.Reset();
-            Singleton<FikaClient>.Instance.SendData(writer, ref packet, DeliveryMethod.Unreliable);
+            Singleton<FikaClient>.Instance.SendData(new NetDataWriter(), ref packet, DeliveryMethod.Unreliable);
         }
-        // Send server's stats to all clients
+        // Send server's own stats to all clients
         else if (MatchmakerAcceptPatches.IsServer) {
             Logger.LogInfo($"Sending server stats to all clients: {packet.Timestamp} {packet.Nickname} {packet.ProfileID} {packet.FPS}");
-            writer.Reset();
-            Singleton<FikaServer>.Instance.SendDataToAll(writer, ref packet, DeliveryMethod.Unreliable);
+            Singleton<FikaServer>.Instance.SendDataToAll(new NetDataWriter(), ref packet, DeliveryMethod.Unreliable);
         }
     }
 
@@ -184,7 +184,7 @@ public class Plugin : BaseUnityPlugin
 
     private void OnClientCreatedEvent(FikaClientCreatedEvent ev)
     {
-        ev.Client.packetProcessor.SubscribeNetSerializable<ServerUpdatePacket>(processServerUpdatePacket);
+        ev.Client.packetProcessor.SubscribeNetSerializable<PlayerStatsPacket>(processPlayerStatsPacket);
     }
 
     private void OnServerCreatedEvent(FikaServerCreatedEvent ev)
@@ -199,32 +199,26 @@ public class Plugin : BaseUnityPlugin
 
     private void OnClientDestroyedEvent(FikaClientDestroyedEvent ev)
     {
-        ev.Client.packetProcessor.RemoveSubscription<ServerUpdatePacket>();
+        ev.Client.packetProcessor.RemoveSubscription<PlayerStatsPacket>();
     }
 
     private void processPlayerStatsPacket(PlayerStatsPacket packet)
     {
         Logger.LogInfo($"Received packet {packet.Timestamp} [{packet.Nickname}]: FPS {packet.FPS}");
-        playerInfoMap[packet.ProfileID] = new PlayerInfo { FPS=packet.FPS, ProfileID=packet.ProfileID, Nickname=packet.Nickname };
+        CoopPlayer myPlayer = (CoopPlayer)Singleton<GameWorld>.Instance.MainPlayer;
+        if (packet.ProfileID != myPlayer.ProfileId){
+            playerInfoMap[packet.ProfileID] = new PlayerInfo { FPS=packet.FPS, ProfileID=packet.ProfileID, Nickname=packet.Nickname };
+        }
         if (MatchmakerAcceptPatches.IsServer) {
             // Propagate to all clients
-            var broadcastPacket = new ServerUpdatePacket { ProfileID=packet.ProfileID, Nickname=packet.Nickname, FPS=packet.FPS, Timestamp=packet.Timestamp};
+            var broadcastPacket = new PlayerStatsPacket { ProfileID=packet.ProfileID, Nickname=packet.Nickname, FPS=packet.FPS, Timestamp=packet.Timestamp};
             Logger.LogInfo($"Propagating {broadcastPacket.Timestamp} {broadcastPacket.Nickname} packet to all clients");
-            writer.Reset();
-            Singleton<FikaServer>.Instance.SendDataToAll(writer, ref broadcastPacket, DeliveryMethod.Unreliable);
-        }
-    }
-
-    private void processServerUpdatePacket(ServerUpdatePacket packet)
-    {
-        Logger.LogInfo($"Received server update packet {packet.Timestamp} [{packet.Nickname}]: FPS {packet.FPS}");
-        CoopPlayer myPlayer = (CoopPlayer)Singleton<GameWorld>.Instance.MainPlayer;
-        if (packet.ProfileID != myPlayer.ProfileId) {
-            playerInfoMap[packet.ProfileID] = new PlayerInfo { FPS=packet.FPS, ProfileID=packet.ProfileID, Nickname=packet.Nickname };
+            Singleton<FikaServer>.Instance.SendDataToAll(new NetDataWriter(), ref broadcastPacket, DeliveryMethod.Unreliable);
         }
     }
 
     private void OnGameWorldStartedEvent(GameWorldStartedEvent ev){
+        Logger.LogInfo("GAMEWORLD STARTED");
         UpdateStats();
     }
 }
