@@ -1,0 +1,34 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "dotnet",
+			"task": "clean",
+			"group": "clean",
+			"problemMatcher": [],
+			"label": "dotnet: clean"
+		},
+		{
+            "taskName": "build Debug",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/PlayerStatsSync.csproj"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "taskName": "build Release",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/PlayerStatsSync.csproj",
+                "-c",
+                "Release"
+            ],
+            "problemMatcher": "$msCompile"
+        }    
+	]
+}
