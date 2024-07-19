@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>zhl.PlayerStatsSync</AssemblyName>
+    <Product>Sharing stats among all connected players</Product>
+    <Version>0.1.0</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json;
+      https://nuget.samboy.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+    <RootNamespace>PlayerStatsSync</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="AnimationSystem.Types" HintPath=".\References\AnimationSystem.Types.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath=".\References\hollowed.dll" Private="false" />
+    <Reference Include="bsg.componentace.compression.libs.zlib" HintPath=".\References\bsg.componentace.compression.libs.zlib.dll" Private="false" />
+    <Reference Include="bsg.console.core" HintPath=".\References\bsg.console.core.dll" Private="false" />
+    <Reference Include="Comfort" HintPath=".\References\Comfort.dll" Private="false" />
+    <Reference Include="Comfort.Unity" HintPath=".\References\Comfort.Unity.dll" Private="false" />
+    <Reference Include="CommonExtensions" HintPath=".\References\CommonExtensions.dll" Private="false" />
+    <Reference Include="DissonanceVoip" HintPath=".\References\DissonanceVoip.dll" Private="false" />
+    <Reference Include="Fika.Core">
+      <HintPath>.\References\Fika.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="ItemComponent.Types" HintPath=".\References\ItemComponent.Types.dll" Private="false" />
+    <Reference Include="Newtonsoft.Json" HintPath=".\References\Newtonsoft.Json.dll" Private="false" />
+    <Reference Include="Sirenix.Serialization" HintPath=".\References\Sirenix.Serialization.dll" Private="false" />
+    <Reference Include="Aki.Common">
+      <HintPath>.\References\Aki.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="aki-core">
+      <HintPath>.\References\aki-core.dll</HintPath>
+    </Reference>
+    <Reference Include="aki-custom">
+      <HintPath>.\References\aki-custom.dll</HintPath>
+    </Reference>
+    <Reference Include="aki-debugging">
+      <HintPath>.\References\aki-debugging.dll</HintPath>
+    </Reference>
+    <Reference Include="Aki.Reflection">
+      <HintPath>.\References\Aki.Reflection.dll</HintPath>
+    </Reference>
+    <Reference Include="aki-singleplayer">
+      <HintPath>.\References\aki-singleplayer.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Postprocessing.Runtime" HintPath=".\References\Unity.Postprocessing.Runtime.dll" Private="false" />
+    <Reference Include="Unity.TextMeshPro" HintPath=".\References\Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath=".\References\UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath=".\References\UnityEngine.UI.dll" Private="false" />
+    <Reference Include="websocket-sharp">
+      <HintPath>.\References\websocket-sharp.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <PackageReference Include="UnityEngine.Modules" Version="2019.4.3" IncludeAssets="compile" />
+  </ItemGroup>
+  
+  <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
