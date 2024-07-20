@@ -16,17 +16,9 @@ using System.Text.RegularExpressions;
 
 namespace PlayerStatsSync;
 
-/* Setup steps
-- Add References ItemGroup to csproj file, pointing to References folder including everything in the Tarkov Managed folder as well as Fika core plugin
-- Copy EscapeFromTarkov_Data
-*/
 
 // TODO
 // Log FPS to file
-// Send FPS as data packet to clients to display host FPS stats
-//   All clients on init will get list of players, then start sending data packet to server in intervals at max rate of 1s
-//   Server propagates that info to all clients
-//   Listener on clients will process that packet and display
 // Opt out of sending FPS values
 // ?? Warn of desync of bot counts between host/client?
 [BepInPlugin("com.zhl.playerstatssync", "zhl.PlayerStatsSync", "0.1.0.0")]
@@ -64,19 +56,11 @@ public class Plugin : BaseUnityPlugin
         showGUI = true;
         FikaEventDispatcher.SubscribeEvent<FikaClientCreatedEvent>(OnClientCreatedEvent);
         FikaEventDispatcher.SubscribeEvent<FikaClientDestroyedEvent>(OnClientDestroyedEvent);
-        // TODO
         // Server does not receive this event! Figure out another way to get UpdateStats running on server
         FikaEventDispatcher.SubscribeEvent<GameWorldStartedEvent>(OnGameWorldStartedEvent);
 
         FikaEventDispatcher.SubscribeEvent<FikaServerCreatedEvent>(OnServerCreatedEvent);
         FikaEventDispatcher.SubscribeEvent<FikaServerDestroyedEvent>(OnServerDestroyedEvent);
-        InvokeRepeating("UpdateMyStats", 1f, interval);
-        /*
-        if (Singleton<GameWorld>.Instantiated){
-            // Already in a game world, let's begin updates
-            UpdateStats();
-        }
-        */
     }
 
     private void OnDisable()
@@ -87,6 +71,7 @@ public class Plugin : BaseUnityPlugin
 
         FikaEventDispatcher.UnsubscribeEvent<FikaServerCreatedEvent>(OnServerCreatedEvent);
         FikaEventDispatcher.UnsubscribeEvent<FikaServerDestroyedEvent>(OnServerDestroyedEvent);
+        CancelUpdateStats();
     }
 
     private void Update()
@@ -104,16 +89,32 @@ public class Plugin : BaseUnityPlugin
     }
 
     private void UpdateStats() {
-        Logger.LogInfo("INVOKING SendPlayerStatsUpdate");
+        InvokeRepeating("UpdateMyStats", 1f, interval);
         InvokeRepeating("SendPlayerStatsUpdate", 1f, interval);
+    }
+
+    private void CancelUpdateStats() {
+        CancelInvoke("UpdateMyStats");
+        CancelInvoke("SendPlayerStatsUpdate");
     }
 
     private void UpdateMyStats() {
         if (!Singleton<GameWorld>.Instantiated) {
             return;
         }
+        Logger.LogInfo("GETTING MAIN PLAYER");
         CoopPlayer myPlayer = (CoopPlayer)Singleton<GameWorld>.Instance.MainPlayer;
-        playerInfoMap[myPlayer.ProfileId] = new PlayerInfo{ FPS=(int) fps, ProfileID=myPlayer.ProfileId, Nickname=myPlayer.Profile.Nickname };
+        Logger.LogInfo($"MYPLAYER PROFILE {myPlayer.ProfileId}");
+        Logger.LogInfo($"MYPLAYER Nickname {myPlayer.Profile.Nickname}");
+        Logger.LogInfo($"MYPLAYER isdedi {MatchmakerAcceptPatches.IsDedicated}");
+        Logger.LogInfo($"MYPLAYER isServer {MatchmakerAcceptPatches.IsServer}");
+        playerInfoMap[myPlayer.ProfileId] = new PlayerInfo{
+            FPS=(int) fps,
+            ProfileID=myPlayer.ProfileId,
+            Nickname=myPlayer.Profile.Nickname,
+            IsDedi=MatchmakerAcceptPatches.IsDedicated,
+            IsServer=MatchmakerAcceptPatches.IsServer,
+        };
     }
 
     // 3.9 support
@@ -131,15 +132,19 @@ public class Plugin : BaseUnityPlugin
         packet.ProfileID = myPlayer.ProfileId;
         packet.Nickname = myPlayer.Profile.Nickname;
         packet.Timestamp = $"{Time.unscaledTime}";
+        packet.IsDedi = MatchmakerAcceptPatches.IsDedicated;
+        packet.IsServer = MatchmakerAcceptPatches.IsServer;
 
         if (MatchmakerAcceptPatches.IsClient) {
             Logger.LogInfo($"Sending packet to server: {packet.Timestamp} {packet.Nickname} {packet.ProfileID} {packet.FPS}");
-            Singleton<FikaClient>.Instance.SendData(new NetDataWriter(), ref packet, DeliveryMethod.Unreliable);
+            writer.Reset();
+            Singleton<FikaClient>.Instance.SendData(writer, ref packet, DeliveryMethod.Unreliable);
         }
         // Send server's own stats to all clients
         else if (MatchmakerAcceptPatches.IsServer) {
             Logger.LogInfo($"Sending server stats to all clients: {packet.Timestamp} {packet.Nickname} {packet.ProfileID} {packet.FPS}");
-            Singleton<FikaServer>.Instance.SendDataToAll(new NetDataWriter(), ref packet, DeliveryMethod.Unreliable);
+            writer.Reset();
+            Singleton<FikaServer>.Instance.SendDataToAll(writer, ref packet, DeliveryMethod.Unreliable);
         }
     }
 
@@ -159,11 +164,19 @@ public class Plugin : BaseUnityPlugin
         var uiWidth = 200;
         var uiHeight = 200;
         GUIStyle normalStyle = new() { normal = { textColor = Color.white }};
+        GUIStyle clearStyle = new () { normal = { textColor = Color.clear }};
         GUILayout.BeginArea(new Rect(screenX - uiWidth, 5, uiWidth, uiHeight));
         GUILayout.BeginVertical(drawBox ? "box" : "");
         foreach(var player in playerInfoMap.Values){
+            int nameLength = player.Nickname.Length;
             GUILayout.BeginHorizontal();
-            GUILayout.Label($"{player.Nickname}: ", normalStyle);
+            GUILayout.Label("D", player.IsDedi ? normalStyle : clearStyle);
+            GUILayout.Label("S", player.IsServer ? normalStyle : clearStyle);
+            GUILayout.Space(5);
+            GUILayout.Label($"{player.Nickname}: ");
+            //GUILayout.Label($"{(nameLength > 20 ? player.Nickname.Substring(0, 17) + "..." : player.Nickname)}: ", normalStyle);
+            // Empty padding of consistent size
+            //GUILayout.Label($"{new string('0', nameLength >= 20 ? 0 : 20 - nameLength)}", clearStyle);
             GUILayout.Label($"{player.FPS}", getFPSStyle(player.FPS));
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
@@ -184,22 +197,42 @@ public class Plugin : BaseUnityPlugin
 
     private void OnClientCreatedEvent(FikaClientCreatedEvent ev)
     {
+        Logger.LogInfo("Starting update stats on client");
+        UpdateStats();
         ev.Client.packetProcessor.SubscribeNetSerializable<PlayerStatsPacket>(processPlayerStatsPacket);
+    }
+
+    private void OnClientDestroyedEvent(FikaClientDestroyedEvent ev)
+    {
+        Logger.LogInfo("Cancelling update stats due to client destroy");
+        ev.Client.packetProcessor.RemoveSubscription<PlayerStatsPacket>();
+        CancelUpdateStats();
     }
 
     private void OnServerCreatedEvent(FikaServerCreatedEvent ev)
     {
+        Logger.LogInfo("Starting update stats on server");
+        UpdateStats();
         ev.Server.packetProcessor.SubscribeNetSerializable<PlayerStatsPacket>(processPlayerStatsPacket);
     }
 
     private void OnServerDestroyedEvent(FikaServerDestroyedEvent ev)
     {
+        Logger.LogInfo("Cancelling update stats due to server destroy");
         ev.Server.packetProcessor.RemoveSubscription<PlayerStatsPacket>();
+        CancelUpdateStats();
     }
-
-    private void OnClientDestroyedEvent(FikaClientDestroyedEvent ev)
+    
+    private void SavePlayerInfo(PlayerStatsPacket packet)
     {
-        ev.Client.packetProcessor.RemoveSubscription<PlayerStatsPacket>();
+        playerInfoMap[packet.ProfileID] = new PlayerInfo
+        {
+            FPS = packet.FPS,
+            ProfileID = packet.ProfileID,
+            Nickname = packet.Nickname,
+            IsDedi = packet.IsDedi,
+            IsServer = packet.IsServer,
+        };
     }
 
     private void processPlayerStatsPacket(PlayerStatsPacket packet)
@@ -207,18 +240,19 @@ public class Plugin : BaseUnityPlugin
         Logger.LogInfo($"Received packet {packet.Timestamp} [{packet.Nickname}]: FPS {packet.FPS}");
         CoopPlayer myPlayer = (CoopPlayer)Singleton<GameWorld>.Instance.MainPlayer;
         if (packet.ProfileID != myPlayer.ProfileId){
-            playerInfoMap[packet.ProfileID] = new PlayerInfo { FPS=packet.FPS, ProfileID=packet.ProfileID, Nickname=packet.Nickname };
+            SavePlayerInfo(packet);
         }
         if (MatchmakerAcceptPatches.IsServer) {
             // Propagate to all clients
             var broadcastPacket = new PlayerStatsPacket { ProfileID=packet.ProfileID, Nickname=packet.Nickname, FPS=packet.FPS, Timestamp=packet.Timestamp};
             Logger.LogInfo($"Propagating {broadcastPacket.Timestamp} {broadcastPacket.Nickname} packet to all clients");
-            Singleton<FikaServer>.Instance.SendDataToAll(new NetDataWriter(), ref broadcastPacket, DeliveryMethod.Unreliable);
+            writer.Reset();
+            Singleton<FikaServer>.Instance.SendDataToAll(writer, ref broadcastPacket, DeliveryMethod.Unreliable);
         }
     }
 
+    // Client only
     private void OnGameWorldStartedEvent(GameWorldStartedEvent ev){
         Logger.LogInfo("GAMEWORLD STARTED");
-        UpdateStats();
     }
 }
