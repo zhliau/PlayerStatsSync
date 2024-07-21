@@ -13,6 +13,7 @@ using EFT;
 using System.Collections.Generic;
 using Fika.Core.Coop.Matchmaker;
 using System.Text.RegularExpressions;
+using BepInEx.Configuration;
 
 namespace PlayerStatsSync;
 
@@ -28,9 +29,10 @@ public class Plugin : BaseUnityPlugin
     internal static new ManualLogSource Logger;
     private NetDataWriter writer;
 
-    bool showGUI = true;
-    int fpsWarnThreshold = 100;
-    int fpsCriticalThreshold = 30;
+    // Config settings
+    public static ConfigEntry<bool> EnableGUI { get; set; }
+    public static ConfigEntry<int> FPSWarningThreshold { get; set; }
+    public static ConfigEntry<int> FPSCriticalThreshold { get; set; }
     GUIStyle warnStyle = new() { normal = { textColor = Color.yellow }};
     GUIStyle criticalStyle = new() { normal = { textColor = Color.red }};
     GUIStyle normalStyle = new() { normal = { textColor = Color.white }};
@@ -48,12 +50,16 @@ public class Plugin : BaseUnityPlugin
 
         // Plugin startup logic
         Logger = base.Logger;
+
+        // Config
+        EnableGUI = Config.Bind("General", "Enable GUI", true, "Enable Stats GUI");
+        FPSWarningThreshold = Config.Bind("General", "FPS Warning Threshold", 45, "FPS value under which is considered warning");
+        FPSCriticalThreshold = Config.Bind("General", "FPS Critical Threshold", 45, "FPS value under which is considered critical");
     }
 
 
     private void OnEnable()
     {
-        showGUI = true;
         FikaEventDispatcher.SubscribeEvent<FikaClientCreatedEvent>(OnClientCreatedEvent);
         FikaEventDispatcher.SubscribeEvent<FikaClientDestroyedEvent>(OnClientDestroyedEvent);
         // Server does not receive this event! Figure out another way to get UpdateStats running on server
@@ -102,12 +108,7 @@ public class Plugin : BaseUnityPlugin
         if (!Singleton<GameWorld>.Instantiated) {
             return;
         }
-        Logger.LogInfo("GETTING MAIN PLAYER");
         CoopPlayer myPlayer = (CoopPlayer)Singleton<GameWorld>.Instance.MainPlayer;
-        Logger.LogInfo($"MYPLAYER PROFILE {myPlayer.ProfileId}");
-        Logger.LogInfo($"MYPLAYER Nickname {myPlayer.Profile.Nickname}");
-        Logger.LogInfo($"MYPLAYER isdedi {MatchmakerAcceptPatches.IsDedicated}");
-        Logger.LogInfo($"MYPLAYER isServer {MatchmakerAcceptPatches.IsServer}");
         playerInfoMap[myPlayer.ProfileId] = new PlayerInfo{
             FPS=(int) fps,
             ProfileID=myPlayer.ProfileId,
@@ -150,7 +151,7 @@ public class Plugin : BaseUnityPlugin
 
     void OnGUI()
     {
-        if (!showGUI) {
+        if (!EnableGUI.Value) {
             return;
         }
         if (!Singleton<GameWorld>.Instantiated){
@@ -187,9 +188,9 @@ public class Plugin : BaseUnityPlugin
 
     private GUIStyle getFPSStyle(int FPS)
     {
-        if (FPS < fpsCriticalThreshold) {
+        if (FPS < FPSCriticalThreshold.Value) {
             return criticalStyle;
-        } else if (FPS < fpsWarnThreshold) {
+        } else if (FPS < FPSWarningThreshold.Value) {
             return warnStyle;
         }
         return normalStyle;
@@ -237,7 +238,7 @@ public class Plugin : BaseUnityPlugin
 
     private void processPlayerStatsPacket(PlayerStatsPacket packet)
     {
-        Logger.LogInfo($"Received packet {packet.Timestamp} [{packet.Nickname}]: FPS {packet.FPS}");
+        Logger.LogDebug($"Received packet {packet.Timestamp} [{packet.Nickname}]: FPS {packet.FPS}");
         CoopPlayer myPlayer = (CoopPlayer)Singleton<GameWorld>.Instance.MainPlayer;
         if (packet.ProfileID != myPlayer.ProfileId){
             SavePlayerInfo(packet);
@@ -245,7 +246,7 @@ public class Plugin : BaseUnityPlugin
         if (MatchmakerAcceptPatches.IsServer) {
             // Propagate to all clients
             var broadcastPacket = new PlayerStatsPacket { ProfileID=packet.ProfileID, Nickname=packet.Nickname, FPS=packet.FPS, Timestamp=packet.Timestamp};
-            Logger.LogInfo($"Propagating {broadcastPacket.Timestamp} {broadcastPacket.Nickname} packet to all clients");
+            Logger.LogDebug($"Propagating {broadcastPacket.Timestamp} {broadcastPacket.Nickname} packet to all clients");
             writer.Reset();
             Singleton<FikaServer>.Instance.SendDataToAll(writer, ref broadcastPacket, DeliveryMethod.Unreliable);
         }
